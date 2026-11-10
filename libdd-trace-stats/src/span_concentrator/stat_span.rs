@@ -4,6 +4,7 @@
 //! This module implements a common interface for spans used to compute stats. It is used to
 //! support both trace-utils' Span and pb::Span.
 
+use super::aggregation::TAG_SPANKIND;
 use libdd_trace_protobuf::pb;
 use libdd_trace_utils::span::v1::{AttributeValue, Span as SpanV1, SpanKind, TraceChunk};
 // trace_utils (v04), trace_utils_v1, and trace_utils_pb (aliased below) all expose functions
@@ -150,7 +151,7 @@ impl<'a, T: TraceData> StatSpan<'a> for SpanV1<T> {
             // wire-level default and indistinguishable from "unset", so it's treated as no value
             // here like `Unspecified`, leaving room for a chunk-level fallback (see
             // `ChunkSpanView`).
-            _ if key == "span.kind"
+            _ if key == TAG_SPANKIND
                 && !matches!(self.span_kind, SpanKind::Internal | SpanKind::Unspecified) =>
             {
                 Some(self.span_kind.as_meta_str())

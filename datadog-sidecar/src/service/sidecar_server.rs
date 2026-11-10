@@ -498,17 +498,6 @@ impl Drop for ConnectionSidecarHandler {
     }
 }
 
-/// The trace route the agent advertises in `/info` once it supports the V1 trace protocol.
-const V1_TRACES_ENDPOINT: &str = "/v1.0/traces";
-
-/// Whether the agent's `/info` advertises `/v1.0/traces`. Matches
-/// `TraceExporter::refresh_v1_active` so the sidecar and in-process exporter negotiate V1 alike.
-fn agent_info_advertises_v1(info: &AgentInfoStruct) -> bool {
-    info.endpoints
-        .as_ref()
-        .is_some_and(|e| e.iter().any(|p| p == V1_TRACES_ENDPOINT))
-}
-
 impl SidecarServer {
     pub(crate) fn shm_limiters(&self) -> &ShmLimiters {
         self.remote_configs.shm_limiters()
@@ -732,9 +721,7 @@ impl SidecarServer {
         }
         // The session's `/info` is fetched since `set_connection_config`. A fetcher keyed by the
         // trace endpoint would be a separate, cold one.
-        session.agent_info().is_some_and(|info| {
-            !info.v1_rejected() && Self::peek_agent_info(info, agent_info_advertises_v1)
-        })
+        session.agent_info().is_some_and(|info| info.v1_active())
     }
 
     /// Applies `f` to the agent info without blocking the send path; false until it is fetched.
@@ -2881,7 +2868,7 @@ mod tests {
         });
 
         send_v1_and_flush(&mut handler, sample_v1_trace_payload_bytes()).await;
-        assert!(probe.v1_rejected());
+        assert!(!probe.v1_active());
         let v1_calls = v1_mock.calls_async().await;
         assert!(v1_calls > 0);
         // Re-fetched without waiting for the next poll; unchanged, so V1 stays off.
@@ -2896,7 +2883,7 @@ mod tests {
         send_v1_and_flush(&mut handler, sample_v1_trace_payload_bytes()).await;
         v04_mock.assert_calls_async(1).await;
         assert_eq!(v1_mock.calls_async().await, v1_calls);
-        assert!(probe.v1_rejected());
+        assert!(!probe.v1_active());
 
         // The agent now serves V1 and a changed `/info`.
         info_mock.delete_async().await;
@@ -2915,12 +2902,12 @@ mod tests {
             .await;
         probe.refresh();
         for _ in 0..100 {
-            if !probe.v1_rejected() {
+            if probe.v1_active() {
                 break;
             }
             sleep(TokioDuration::from_millis(10)).await;
         }
-        assert!(!probe.v1_rejected());
+        assert!(probe.v1_active());
         info_mock.assert_async().await;
 
         send_v1_and_flush(&mut handler, sample_v1_trace_payload_bytes()).await;

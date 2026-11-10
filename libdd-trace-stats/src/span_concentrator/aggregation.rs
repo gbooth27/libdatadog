@@ -38,7 +38,7 @@ const TAG_METHOD_OTEL: &str = "http.request.method";
 /// [`TRACER_BLOCKED_VALUE`].
 pub const ADDITIONAL_METRIC_TAG_VALUE_MAX_LEN: usize = 200;
 const TAG_SYNTHETICS: &str = "synthetics";
-const TAG_SPANKIND: &str = "span.kind";
+pub(super) const TAG_SPANKIND: &str = "span.kind";
 const TAG_BASE_SERVICE: &str = "_dd.base_service";
 const TAG_ORIGIN: &str = "_dd.origin";
 const TAG_SVC_SRC: &str = "_dd.svc_src";

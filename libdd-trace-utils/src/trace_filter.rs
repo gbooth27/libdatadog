@@ -9,6 +9,7 @@ use libdd_trace_normalization::{normalize_utils, normalizer};
 use tracing::{debug, error};
 
 use crate::span::span_pool::PooledChunks;
+use crate::span::trace_utils::{COMPONENT_KEY, ENV_KEY, SPAN_KIND_KEY, VERSION_KEY};
 use crate::span::v1::span_pool::PooledTraceChunks;
 use crate::span::v1::{AttributeValue, SpanKind};
 use crate::span::vec_map::VecMap;
@@ -126,10 +127,12 @@ impl<'a, T: TraceData> Span<'a> for span::v1::Span<T> {
             // fields rather than stored in `attributes` (see the V1 downgrade encoder). Empty
             // text / the default `Internal` kind (or `Unspecified`) are treated as "unset" here.
             _ => match key {
-                "env" if !self.env.borrow().is_empty() => Some(self.env.borrow()),
-                "version" if !self.version.borrow().is_empty() => Some(self.version.borrow()),
-                "component" if !self.component.borrow().is_empty() => Some(self.component.borrow()),
-                "span.kind"
+                ENV_KEY if !self.env.borrow().is_empty() => Some(self.env.borrow()),
+                VERSION_KEY if !self.version.borrow().is_empty() => Some(self.version.borrow()),
+                COMPONENT_KEY if !self.component.borrow().is_empty() => {
+                    Some(self.component.borrow())
+                }
+                SPAN_KIND_KEY
                     if !matches!(self.span_kind, SpanKind::Internal | SpanKind::Unspecified) =>
                 {
                     Some(self.span_kind.as_meta_str())

@@ -24,7 +24,7 @@
 //! | Chunk `attributes`                    | Applied to every span in the chunk          |
 //! | Payload `env` / `app_version`         | Fallback for `meta["env"]` / `meta["version"]` when the span leaves them unset |
 //! | Payload `attributes`                  | Applied to every span, lowest precedence (span > chunk > payload) |
-//! | Chunk `dropped_trace: true`           | Forces `metrics["_sampling_priority_v1"] = -1` (USER_REJECT) unless the chunk's own priority is already negative |
+//! | Chunk `dropped_trace`                 | Not mapped: agent-owned, set by the agent's samplers |
 //!
 //! An attribute sharing a name with one of the dedicated fields above (`env`, `version`,
 //! `component`, `span.kind`, `_dd.p.tid`, `_dd.origin`, `_dd.p.dm`, `_sampling_priority_v1`) is
@@ -1215,42 +1215,26 @@ mod tests {
     }
 
     #[test]
-    fn dropped_trace_forces_user_reject_priority() {
-        let payload = TracerPayloadBytes {
-            chunks: vec![TraceChunkBytes {
-                trace_id: [0u8; 16],
-                dropped_trace: true,
-                spans: vec![minimal_span()],
+    fn dropped_trace_does_not_affect_priority() {
+        // `dropped_trace` is agent-owned: the agent overwrites it from its own priority-driven
+        // sampling decision, so the downgrade must emit the chunk's priority verbatim.
+        for priority in [Some(1), None] {
+            let payload = TracerPayloadBytes {
+                chunks: vec![TraceChunkBytes {
+                    trace_id: [0u8; 16],
+                    dropped_trace: true,
+                    priority,
+                    spans: vec![minimal_span()],
+                    ..Default::default()
+                }],
                 ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let traces = encode_and_decode(&payload);
-        let metrics = map_get(&traces[0][0], "metrics").expect("metrics present");
-        assert_eq!(
-            map_get(metrics, "_sampling_priority_v1").unwrap().as_f64(),
-            Some(-1.0)
-        );
-    }
-
-    #[test]
-    fn dropped_trace_keeps_existing_negative_priority() {
-        let payload = TracerPayloadBytes {
-            chunks: vec![TraceChunkBytes {
-                trace_id: [0u8; 16],
-                dropped_trace: true,
-                priority: Some(-2),
-                spans: vec![minimal_span()],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let traces = encode_and_decode(&payload);
-        let metrics = map_get(&traces[0][0], "metrics").expect("metrics present");
-        assert_eq!(
-            map_get(metrics, "_sampling_priority_v1").unwrap().as_f64(),
-            Some(-2.0)
-        );
+            };
+            let traces = encode_and_decode(&payload);
+            let emitted = map_get(&traces[0][0], "metrics")
+                .and_then(|m| map_get(m, "_sampling_priority_v1"))
+                .and_then(|v| v.as_f64());
+            assert_eq!(emitted, priority.map(f64::from), "priority={priority:?}");
+        }
     }
 
     #[test]
